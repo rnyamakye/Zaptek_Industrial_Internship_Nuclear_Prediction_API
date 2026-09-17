@@ -2,14 +2,13 @@ from pydantic import BaseModel, Field
 
 
 class PredictionRequest(BaseModel):
-    """Input payload for /predict.
+    # Input payload for /predict.
 
-    NOTE: adjust the ge/le bounds once you know the real valid ranges
-    the model was trained on — ask the ML sub-team.
-    """
+    # NOTE: adjust the ge/le bounds once you know the real valid ranges
+    # the model was trained on — ask the ML sub-team.
 
     enrichment_percent: float = Field(
-        ..., ge=2.0, le=5.0, description="Uranium enrichment percentage (valid range 2-5%)"
+        ..., gt=0, le=100, description="Uranium enrichment percentage"
     )
     fuel_density: float = Field(..., gt=0, description="Fuel density (g/cm^3)")
     moderator_density: float = Field(
@@ -34,3 +33,12 @@ class PredictionResponse(BaseModel):
     uncertainty: float | None = Field(
         None, description="Confidence/uncertainty estimate, if supported by the model"
     )
+
+    class Config:
+       json_schema_extra = {
+           "example":{
+               "k_eff": 1.02,
+               "reactor_status": "Supercritical",
+               "uncertainty": 0.008
+           }
+       }
