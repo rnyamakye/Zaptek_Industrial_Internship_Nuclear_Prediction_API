@@ -25,9 +25,10 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Drop the real model file at the path set by `MODEL_PATH` in `.env`
-(defaults to `app/models/model.pkl`). Until it's there, the API runs
-on a mock prediction so the rest of the team isn't blocked.
+The real trained model is already included at `app/models/model.pkl`
+and loaded automatically. If it's ever missing (e.g. `.gitignore`
+excludes `*.pkl` by default), the API falls back to a mock prediction
+so the rest of the team isn't blocked.
 
 ## Run locally
 
@@ -40,17 +41,22 @@ uvicorn app.main:app --reload
 
 ## How the ML model is integrated
 
-1. `app/models/ml_service.py` loads the model once (cached) via `joblib.load`.
-2. `POST /predict` (in `app/api/routes.py`) validates the request body
-   against `PredictionRequest` (in `app/schemas/prediction.py`).
-3. Validated input is passed to `predict()` in `ml_service.py`, which
-   builds the feature vector, calls `model.predict(...)`, and maps the
-   raw output to `k_eff`, `reactor_status`, and `uncertainty`.
-4. The result is returned as `PredictionResponse`, serialized to JSON.
+`app/models/model.pkl` is a bundle (a dict), not a bare model:
+- `regressor`: trained `RandomForestRegressor` — predicts `k_eff` (R\u00b2 0.9977)
+- `classifier`: a `DecisionTreeClassifier` — present but unused, since the
+  bundle also ships exact deterministic thresholds (see below)
+- `feature_names`: `['enrichment_percent', 'fuel_density', 'moderator_density']`
+- `status_thresholds`: `{subcritical_max: 0.95, supercritical_min: 1.05}`
+- `training_data_range`: valid input bounds, mirrored in `schemas/prediction.py`
 
-**TODO once the real model arrives:** confirm the exact feature order/
-shape it expects, and how it encodes status/uncertainty in its raw
-output — both are marked with `# TODO` in `ml_service.py`.
+Flow:
+1. `app/models/ml_service.py` loads the bundle once (cached) via `joblib.load`.
+2. `POST /predict` validates the request against `PredictionRequest`.
+3. `predict()` builds a feature DataFrame in the bundle's expected column
+   order, runs `regressor.predict(...)` for `k_eff`, classifies status using
+   the bundle's own thresholds, and estimates `uncertainty` as the standard
+   deviation of predictions across the forest's 100 individual trees.
+4. The result is returned as `PredictionResponse`, serialized to JSON.
 
 ## Testing
 

@@ -4,15 +4,16 @@ from pydantic import BaseModel, Field
 class PredictionRequest(BaseModel):
     # Input payload for /predict.
 
-    # NOTE: adjust the ge/le bounds once you know the real valid ranges
-    # the model was trained on — ask the ML sub-team.
+    # Bounds match the trained model's actual training_data_range.
 
     enrichment_percent: float = Field(
-        ..., gt=0, le=100, description="Uranium enrichment percentage"
+        ..., ge=2.0, le=5.0, description="Uranium enrichment percentage (valid range 2-5%)"
     )
-    fuel_density: float = Field(..., gt=0, description="Fuel density (g/cm^3)")
+    fuel_density: float = Field(
+        ..., ge=9.80, le=10.60, description="Fuel density in g/cm^3 (valid range 9.80-10.60)"
+    )
     moderator_density: float = Field(
-        ..., gt=0, description="Moderator density (g/cm^3)"
+        ..., ge=0.95, le=1.05, description="Moderator density in g/cm^3 (valid range 0.95-1.05)"
     )
 
     class Config:
@@ -29,17 +30,17 @@ class PredictionResponse(BaseModel):
     k_eff: float = Field(...,
                          description="Predicted neutron multiplication factor")
     reactor_status: str = Field(
-        ..., description="Predicted status, e.g. subcritical/critical/supercritical"
+        ..., description="Predicted status: Subcritical, Critical, or Supercritical"
     )
     uncertainty: float | None = Field(
-        None, description="Confidence/uncertainty estimate, if supported by the model"
+        None, description="Std. deviation of predictions across the forest's trees"
     )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "k_eff": 1.02,
-                "reactor_status": "Supercritical",
-                "uncertainty": 0.008
+                "reactor_status": "Critical",
+                "uncertainty": 0.009
             }
         }
