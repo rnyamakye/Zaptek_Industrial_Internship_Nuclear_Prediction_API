@@ -3,6 +3,6 @@ __pycache__/
 .env
 .venv/
 venv/
-*.pkl
+
 *.joblib
 .pytest_cache/
