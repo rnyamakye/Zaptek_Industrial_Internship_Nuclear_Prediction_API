@@ -1,4 +1,5 @@
 $kind: http-request
+description: Tests Pydantic validation. Enrichment must be between 2.0% and 5.0%.
 url: "{{base_url}}/predict"
 method: POST
 headers:
@@ -7,9 +8,9 @@ body:
   type: text
   content: |-
     {
-      "enrichment_percent": 101,
+      "enrichment_percent": 1.0,
       "fuel_density": 10.5,
-      "moderator_density": 0.7
+      "moderator_density": 0.98
     }
 scripts:
   - type: afterResponse

@@ -1,0 +1,44 @@
+$kind: http-request
+description: Valid prediction request using the upper boundary of the enrichment range.
+url: "{{base_url}}/predict"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "enrichment_percent": 5.0,
+      "fuel_density": 10.5,
+      "moderator_density": 0.98
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Prediction endpoint returns 200", function () {
+          pm.response.to.have.status(200);
+      });
+
+      const response = pm.response.json();
+
+      pm.test("Response contains k_eff", function () {
+          pm.expect(response).to.have.property("k_eff");
+      });
+
+      pm.test("k_eff is a number", function () {
+          pm.expect(response.k_eff).to.be.a("number");
+      });
+
+      pm.test("Response contains reactor_status", function () {
+          pm.expect(response).to.have.property("reactor_status");
+      });
+
+      pm.test("Reactor status is valid", function () {
+          pm.expect(["Subcritical", "Critical", "Supercritical"]).to.include(response.reactor_status);
+      });
+
+      pm.test("Response contains uncertainty", function () {
+          pm.expect(response).to.have.property("uncertainty");
+      });
+    language: text/javascript
+order: 4000

@@ -1,4 +1,0 @@
-$kind: collection
-description: Postman collection for testing the Nuclear Reactor Behavior Prediction API. Includes health check, subcritical, critical, supercritical, and validation-error requests.
-variables:
-  base_url: http://127.0.0.1:8000
