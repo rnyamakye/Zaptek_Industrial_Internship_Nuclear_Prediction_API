@@ -1,0 +1,31 @@
+$kind: http-request
+url: "{{base_url}}/predict"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "enrichment_percent": 101,
+      "fuel_density": 10.5,
+      "moderator_density": 0.7
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Validation error returns 422", function () {
+          pm.response.to.have.status(422);
+      });
+
+      const response = pm.response.json();
+
+      pm.test("Response contains validation details", function () {
+          pm.expect(response).to.have.property("detail");
+      });
+
+      pm.test("Validation detail is an array", function () {
+          pm.expect(response.detail).to.be.an("array");
+      });
+    language: text/javascript
+order: 5000

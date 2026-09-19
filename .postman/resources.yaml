@@ -1,0 +1,15 @@
+# Use this workspace to collaborate
+workspace:
+  id: 62492094-9de5-43ea-8c58-1807ff0f1e7b
+
+localResources:
+  collections:
+    - ../Zaptek_Industrial_Internship_Nuclear_Prediction_API/postman/Nuclear
+      Reactor Behaviour API
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
+cloudResources:
+  collections:
+    ../Zaptek_Industrial_Internship_Nuclear_Prediction_API/postman/Nuclear Reactor Behaviour API: f3e1b8c0-4d5a-4e2b-9f3c-1e2b3c4d5e6f
+    ../postman/collections/Nuclear Reactor Behavior Prediction API: f2d16c3e-c583-468a-842f-f4a8ecbb4482
