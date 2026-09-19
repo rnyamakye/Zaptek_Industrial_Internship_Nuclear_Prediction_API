@@ -17,7 +17,8 @@ class ModelNotLoadedError(Exception):
 def _load_model():
     """Load the model once and cache it for the app's lifetime."""
     try:
-        import joblib  # TODO: swap for the correct loader (joblib/pickle/onnxruntime/etc.)
+        # TODO: swap for the correct loader (joblib/pickle/onnxruntime/etc.)
+        import joblib
 
         return joblib.load(settings.MODEL_PATH)
     except FileNotFoundError:
@@ -32,10 +33,11 @@ def predict(payload: PredictionRequest) -> PredictionResponse:
     if model is None:
         # --- MOCK PATH: remove once the real model is wired in ---
         k_eff = 0.98 + (payload.enrichment_percent * 0.001)
-        status = "critical" if 0.99 <= k_eff <= 1.01 else (
-            "subcritical" if k_eff < 0.99 else "supercritical"
+        return PredictionResponse(
+            k_eff=round(k_eff, 4),
+            reactor_status=classify_status(k_eff),
+            uncertainty=None,
         )
-        return PredictionResponse(k_eff=round(k_eff, 4), reactor_status=status, uncertainty=None)
 
     # --- REAL PATH ---
     # TODO: confirm the exact input order/shape the model expects.
@@ -45,12 +47,19 @@ def predict(payload: PredictionRequest) -> PredictionResponse:
         payload.moderator_density,
     ]]
     raw_output = model.predict(features)
-
-    # TODO: unpack raw_output into k_eff / status / uncertainty based
-    # on what the model actually returns (adjust as needed).
     k_eff = float(raw_output[0])
-    status = "critical" if 0.99 <= k_eff <= 1.01 else (
-        "subcritical" if k_eff < 0.99 else "supercritical"
+
+    return PredictionResponse(
+        k_eff=round(k_eff, 4),
+        reactor_status=classify_status(k_eff),
+        uncertainty=None,
     )
 
-    return PredictionResponse(k_eff=round(k_eff, 4), reactor_status=status, uncertainty=None)
+
+def classify_status(k_eff: float) -> str:
+    """Matches the ML team's rule from their notebook (not a trained classifier)."""
+    if k_eff < 0.95:
+        return "Subcritical"
+    elif k_eff <= 1.05:
+        return "Critical"
+    return "Supercritical"
