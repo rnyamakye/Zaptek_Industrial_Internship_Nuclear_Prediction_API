@@ -6,3 +6,4 @@ venv/
 
 *.joblib
 .pytest_cache/
+*.db
