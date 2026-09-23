@@ -4,6 +4,7 @@ from app.api.auth_routes import router as auth_router
 from app.api.routes import router as predict_router
 from app.core.config import settings
 from app.db.database import Base, engine
+from app import db_models
 
 # Creates any tables (User, and Predictions once Reginald's model lands)
 # that don't exist yet. Safe to call on every startup.
