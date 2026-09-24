@@ -1,0 +1,39 @@
+$kind: http-request
+url: '{{base_url}}/predictions/batch'
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+body:
+  type: text
+  content: |-
+    [
+      {
+        "enrichment_percent": 2.0,
+        "fuel_density": 10.0,
+        "moderator_density": 0.98
+      },
+      {
+        "enrichment_percent": 3.0,
+        "fuel_density": 10.2,
+        "moderator_density": 1.00
+      },
+      {
+        "enrichment_percent": 4.0,
+        "fuel_density": 10.4,
+        "moderator_density": 1.02
+      },
+      {
+        "enrichment_percent": 5.0,
+        "fuel_density": 10.5,
+        "moderator_density": 0.99
+      }
+    ]
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Batch prediction returns 201", function () { pm.response.to.have.status(201); });
+      const response = pm.response.json();
+      pm.test("Batch response is an array", function () { pm.expect(response).to.be.an("array"); });
+    language: text/javascript
+order: 2000

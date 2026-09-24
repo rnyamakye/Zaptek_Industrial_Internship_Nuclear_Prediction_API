@@ -20,7 +20,6 @@ router = APIRouter(
 MODEL_VERSION = "v1.0"
 
 
-
 @router.post(
     "",
     response_model=PredictionRecordResponse,
@@ -125,8 +124,6 @@ def create_batch_predictions(
     return predictions
 
 
-
-
 @router.get(
     "",
     response_model=list[PredictionRecordResponse],
@@ -148,7 +145,6 @@ def get_predictions(
     )
 
     return predictions
-
 
 
 @router.get(
@@ -217,8 +213,6 @@ def delete_prediction(
     db.commit()
 
     return None
-
-
 
 
 # from fastapi import APIRouter, HTTPException

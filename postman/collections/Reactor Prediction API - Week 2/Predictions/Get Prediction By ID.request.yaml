@@ -1,0 +1,7 @@
+$kind: http-request
+description: ""
+url: "{{base_url}}/predictions/{{prediction_id}}"
+method: GET
+headers:
+  Authorization: Bearer {{access_token}}
+order: 4000

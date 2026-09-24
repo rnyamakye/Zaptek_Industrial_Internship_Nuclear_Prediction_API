@@ -1,0 +1,17 @@
+name: Reactor Prediction API - Local
+values:
+  - key: base_url
+    value: "http://localhost:8000"
+    enabled: true
+  - key: test_email
+    value: testuser@example.com
+    enabled: true
+  - key: test_password
+    value: ChangeMe123!
+    enabled: true
+  - key: access_token
+    value: ""
+    enabled: true
+  - key: prediction_id
+    value: ""
+    enabled: true

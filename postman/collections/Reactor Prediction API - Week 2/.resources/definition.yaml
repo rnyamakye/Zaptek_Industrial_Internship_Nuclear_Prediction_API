@@ -1,0 +1,8 @@
+$kind: collection
+description: Postman collection for the Week 2 authenticated reactor prediction API.
+variables:
+  base_url: http://127.0.0.1:8000
+  access_token: ""
+  prediction_id: "1"
+  test_email: testuser@example.com
+  test_password: ChangeMe123!

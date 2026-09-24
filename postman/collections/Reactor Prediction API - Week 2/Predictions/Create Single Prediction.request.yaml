@@ -1,0 +1,23 @@
+$kind: http-request
+url: '{{base_url}}/predictions'
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+body:
+  type: text
+  content: |-
+    {
+      "enrichment_percent": 3.7,
+      "fuel_density": 10.5,
+      "moderator_density": 0.98
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Single prediction returns 201", function () { pm.response.to.have.status(201); });
+      const response = pm.response.json();
+      pm.test("Response contains prediction ID", function () { pm.expect(response).to.have.property("id"); });
+      if (response.id) { pm.collectionVariables.set("prediction_id", response.id); }
+    language: text/javascript
+order: 1000

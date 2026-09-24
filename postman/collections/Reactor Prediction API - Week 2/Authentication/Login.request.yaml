@@ -1,0 +1,19 @@
+$kind: http-request
+url: '{{base_url}}/auth/login'
+method: POST
+headers:
+  Content-Type: application/x-www-form-urlencoded
+body:
+  type: urlencoded
+  content:
+    username: "{{test_email}}"
+    password: "{{test_password}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Login returns 200", function () { pm.response.to.have.status(200); });
+      const response = pm.response.json();
+      pm.test("Access token is returned", function () { pm.expect(response).to.have.property("access_token"); });
+      if (response.access_token) { pm.collectionVariables.set("access_token", response.access_token); }
+    language: text/javascript
+order: 2000

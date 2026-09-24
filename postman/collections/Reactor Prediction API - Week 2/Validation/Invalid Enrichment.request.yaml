@@ -1,0 +1,19 @@
+$kind: http-request
+url: '{{base_url}}/predictions'
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{access_token}}
+body:
+  type: text
+  content: |-
+    {
+      "enrichment_percent": 1.0,
+      "fuel_density": 10.5,
+      "moderator_density": 0.98
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test("Invalid enrichment returns 422", function () { pm.response.to.have.status(422); });
+    language: text/javascript
+order: 1000

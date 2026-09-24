@@ -1,0 +1,27 @@
+$kind: http-request
+url: '{{base_url}}/auth/register'
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "{{dynamic_name}}",
+      "email": "{{dynamic_email}}",
+      "password": "{{test_password}}"
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substring(2, 8);
+      const uniqueEmail = `testuser_${timestamp}_${randomSuffix}@example.com`;
+      const uniqueName = `Test User ${randomSuffix}`;
+      pm.variables.set('dynamic_email', uniqueEmail);
+      pm.variables.set('dynamic_name', uniqueName);
+  - type: afterResponse
+    language: text/javascript
+    code: pm.test("Registration returns 201", function () { pm.response.to.have.status(201); });
+order: 1000
