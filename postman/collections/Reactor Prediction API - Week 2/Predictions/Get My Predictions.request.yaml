@@ -1,6 +1,13 @@
 $kind: http-request
-url: '{{base_url}}/predictions'
+description: "Demonstrates search/filter/sort/pagination. Admins can also pass ?user_id= to narrow to one user's predictions."
+url: "{{base_url}}/predictions?status=Critical&enrichment_min=3&enrichment_max=5&sort_by=enrichment_percent&sort_order=asc&skip=0&limit=10"
 method: GET
 headers:
   Authorization: Bearer {{access_token}}
-order: 3000
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Filtered predictions returns 200", function () { pm.response.to.have.status(200); });
+      pm.test("Response has X-Total-Count header", function () { pm.response.to.have.header("X-Total-Count"); });
+    language: text/javascript
+order: 3500
