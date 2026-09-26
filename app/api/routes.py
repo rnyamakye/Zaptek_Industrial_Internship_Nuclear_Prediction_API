@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
@@ -152,6 +152,7 @@ def create_batch_predictions(
     ),
 )
 def get_predictions(
+    response: Response,
     status_filter: str | None = Query(
         None,
         alias="status",
@@ -290,6 +291,8 @@ def get_predictions(
     # PAGINATION
     # ------------------------------------------------------
 
+    total = query.count()
+
     skip = (page - 1) * limit
 
     predictions = (
@@ -298,6 +301,8 @@ def get_predictions(
         .limit(limit)
         .all()
     )
+
+    response.headers["X-Total-Count"] = str(total)
 
     return predictions
 
@@ -318,17 +323,15 @@ def get_prediction(
     """
     Get one prediction by ID.
 
-    Users can only access their own predictions.
+    Users can only access their own predictions. Admins can access any.
     """
 
-    prediction = (
-        db.query(PredictionRecord)
-        .filter(
-            PredictionRecord.id == prediction_id,
-            PredictionRecord.user_id == current_user.id,
-        )
-        .first()
-    )
+    query = db.query(PredictionRecord).filter(PredictionRecord.id == prediction_id)
+
+    if current_user.role != "admin":
+        query = query.filter(PredictionRecord.user_id == current_user.id)
+
+    prediction = query.first()
 
     if prediction is None:
         raise HTTPException(
@@ -353,18 +356,17 @@ def delete_prediction(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Delete a prediction belonging to the currently
-    authenticated user.
+    Delete a prediction.
+
+    Users can only delete their own predictions. Admins can delete any.
     """
 
-    prediction = (
-        db.query(PredictionRecord)
-        .filter(
-            PredictionRecord.id == prediction_id,
-            PredictionRecord.user_id == current_user.id,
-        )
-        .first()
-    )
+    query = db.query(PredictionRecord).filter(PredictionRecord.id == prediction_id)
+
+    if current_user.role != "admin":
+        query = query.filter(PredictionRecord.user_id == current_user.id)
+
+    prediction = query.first()
 
     if prediction is None:
         raise HTTPException(
