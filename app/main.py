@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.auth_routes import router as auth_router
 from app.api.routes import router as predict_router
+from app.api.analytics_routes import router as analytics_router
 from app.core.config import settings
 from app.db.database import Base, engine
 from app.db import models
@@ -18,6 +19,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(predict_router)
+app.include_router(analytics_router)
 
 
 @app.get("/health", tags=["health"])

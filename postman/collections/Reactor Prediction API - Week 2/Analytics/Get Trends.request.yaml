@@ -1,0 +1,13 @@
+$kind: http-request
+description: "Predictions per day with the average k_eff for that day, for plotting activity/reactivity over time."
+url: '{{base_url}}/analytics/trends'
+method: GET
+headers:
+  Authorization: Bearer {{access_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Analytics trends returns 200", function () { pm.response.to.have.status(200); });
+      pm.test("Response is an array", function () { pm.expect(pm.response.json()).to.be.an("array"); });
+    language: text/javascript
+order: 2000

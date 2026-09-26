@@ -1,96 +1,117 @@
-# Nuclear Reactor Behavior Prediction API
+# Nuclear Reactor Prediction & Analytics API
 
-A FastAPI backend that wraps a trained machine learning model, letting any
-client ask "given these reactor design inputs, what will happen?" over a
-simple HTTP request instead of running a Python notebook by hand.
+A FastAPI backend that wraps a trained machine learning model behind a full,
+authenticated, database-backed API — letting any client register, log in,
+request reactor behavior predictions, browse their prediction history, and
+pull analytics, all over HTTP.
 
-**Project context:** Week 1 deliverable for Backend Development (ML & Backend
-Integration) — Zaptek Industrial Internship.
+**Project context:** Week 2 deliverable for Backend Development (ML & Backend
+Integration) — Zaptek Industrial Internship. Builds directly on the Week 1
+prediction API by adding authentication, persistence, and analytics.
 
 ---
 
 ## What problem this solves
 
-The ML team trained a model that predicts nuclear reactor behavior from three
-design inputs, achieving 99.77% accuracy (R²) on held-out data. A trained
-model in a notebook is a research result, not a product — it only runs on
-one machine, for one person, at a time. This project turns that model into a
-real, always-on API: something a mobile app, a dashboard, or another service
-can call directly.
+Week 1 turned a trained ML model into a working `/predict` endpoint. Week 2
+turns that into an actual platform: predictions are now tied to accounts,
+saved permanently, searchable, and summarized — the difference between a
+demo and something a real product could be built on top of.
 
-## What it actually predicts
-
-Given three reactor design parameters, the API returns:
-
-| Field | Meaning |
-|---|---|
-| `k_eff` | The neutron multiplication factor — the core reactivity number. `k_eff = 1.0` means the reactor is in a stable, self-sustaining state. |
-| `reactor_status` | A plain-language label: **Subcritical** (`k_eff < 0.95`, reaction dying out), **Critical** (`0.95–1.05`, stable), or **Supercritical** (`k_eff > 1.05`, power increasing) |
-| `uncertainty` | How confident the model is in this specific prediction (lower = more confident) |
-
-**Inputs it needs:**
-
-| Field | Meaning | Valid range |
-|---|---|---|
-| `enrichment_percent` | % of U-235 in the fuel | 2.0 – 5.0 |
-| `fuel_density` | how tightly packed the fuel is (g/cm³) | 9.80 – 10.60 |
-| `moderator_density` | amount of neutron-slowing material (g/cm³) | 0.95 – 1.05 |
-
-These bounds come directly from the data the model was trained on — values
-outside this range are rejected before they ever reach the model.
-
-## How a request flows through the system
+## The workflow, end to end
 
 ```
 Client
-  ↓  POST /predict  { enrichment_percent, fuel_density, moderator_density }
+  ↓  register / login
+Auth (JWT)                    — issues a token, encodes the user's role
   ↓
-Input validation (Pydantic)     — rejects bad input with a 422, before the model ever runs
+Client sends POST /predictions with a token
   ↓
-ML model service                — loads the trained model once, keeps it in memory
+Input validation (Pydantic)   — rejects bad input with a 422
   ↓
-Model inference                 — Random Forest predicts k_eff; status derived from k_eff;
-  ↓                                uncertainty computed from spread across the forest's trees
-JSON response                   — { k_eff, reactor_status, uncertainty }
+ML model service              — loads the trained model once, keeps it in memory
+  ↓
+Model inference                — Random Forest predicts k_eff, status, uncertainty
+  ↓
+Database (SQLite + SQLAlchemy) — every prediction is saved, tied to the user and
+  ↓                               tagged with the model version that produced it
+JSON response
+  ↓
+Later: GET /predictions (search/filter/sort/paginate) or GET /analytics/*
+  to review history and trends
 ```
 
-## The model itself
+## Core concepts
 
-`app/models/model.pkl` is not a single model — it's a bundle containing:
-- A trained **Random Forest Regressor** that predicts `k_eff` (R² = 0.9977, RMSE = 0.0023)
-- The exact **feature order** the model expects
-- The **status thresholds** used to turn a `k_eff` number into Subcritical/Critical/Supercritical
-- The **valid input ranges** from the training data (mirrored in the API's validation rules)
+**Authentication.** Every account has a `role` — `user` or `admin`. Regular
+users only ever see their own predictions. Admins see everyone's by default,
+and can narrow to one user with `?user_id=` on the endpoints that support it.
+Tokens are JWTs; the role is encoded so authorization checks don't need an
+extra database round-trip.
 
-`uncertainty` isn't guessed — it's the real standard deviation across the
-Random Forest's 100 individual trees for that specific input. Trees that
-mostly agree with each other → low uncertainty. Trees that disagree → high
-uncertainty, meaning that particular input sits in a less certain part of the
-model's learned space.
+**What the model predicts.** Given `enrichment_percent` (2–5%), `fuel_density`
+(9.80–10.60 g/cm³), and `moderator_density` (0.95–1.05 g/cm³), the model
+returns `k_eff` (the neutron multiplication factor), `reactor_status`
+(Subcritical / Critical / Supercritical), and `uncertainty` (the spread of
+predictions across the Random Forest's 100 individual trees — a real
+confidence measure, not a placeholder).
+
+**Every prediction is persisted**, tagged with the `model_version` that
+produced it, so results stay traceable even as the model improves over time.
+
+## Endpoints
+
+| Method | Path | What it does |
+|---|---|---|
+| POST | `/auth/register` | Create an account (role defaults to `user`) |
+| POST | `/auth/login` | Log in, get a JWT |
+| GET | `/auth/me` | Check who a token belongs to |
+| POST | `/predictions` | Run one prediction, save it |
+| POST | `/predictions/batch` | Run and save multiple predictions in one call |
+| GET | `/predictions` | Search/filter/sort/paginate prediction history |
+| GET | `/predictions/{id}` | Get one saved prediction |
+| DELETE | `/predictions/{id}` | Delete a saved prediction |
+| GET | `/analytics/summary` | Total predictions, status breakdown, and averages |
+| GET | `/analytics/trends` | Predictions per day, with average k_eff per day |
+| GET | `/health` | Liveness check |
+
+`GET /predictions` supports filtering by status, enrichment range, and date
+range, plus sorting and pagination — see `/docs` for the exact query
+parameters, since these are still being finalized by the team as of this
+writing.
+
+> **Not yet implemented:** `GET /model/info` (model name/version/features).
+> This is still open.
 
 ## Project structure
 
 ```
 app/
-├── main.py               # FastAPI app entrypoint + /health check
-├── api/routes.py         # the /predict endpoint — HTTP layer only
+├── main.py                  # FastAPI app entrypoint, router wiring, table creation
+├── api/
+│   ├── auth_routes.py       # register / login / me
+│   ├── routes.py            # prediction endpoints
+│   ├── analytics_routes.py  # summary / trends
+│   └── deps.py               # shared dependencies: get_db, get_current_user, require_admin
+├── core/
+│   ├── config.py             # environment-based settings
+│   └── security.py           # password hashing, JWT creation/decoding
+├── db/
+│   ├── database.py           # SQLAlchemy engine/session setup
+│   └── models.py             # User and PredictionRecord tables
 ├── models/
-│   ├── ml_service.py     # loads the model bundle, runs inference
-│   └── model.pkl         # the trained model bundle itself
-├── schemas/
-│   └── prediction.py     # Pydantic request/response contracts + validation rules
-└── core/
-    └── config.py         # environment-based settings
-tests/
-└── test_predict.py       # automated tests: valid input, invalid input, health check
-postman/                  # Postman collection — one request per reactor status,
-                           # plus a validation-error example
+│   └── ml_service.py         # loads the trained model bundle, runs inference
+└── schemas/                  # Pydantic request/response contracts
+tests/                        # pytest + FastAPI TestClient
+postman/                      # Postman collection covering auth, predictions, analytics
 ```
 
-Each piece only does one job: `routes.py` never touches the model directly,
-`ml_service.py` never touches HTTP concerns, and `prediction.py` is the single
-source of truth both sides agree on. That means any one person can change
-their piece without breaking anyone else's.
+## The model itself
+
+`app/models/model.pkl` is a bundle containing a trained **Random Forest
+Regressor** (R² ≈ 0.998) plus the exact feature order, status thresholds, and
+valid input ranges it was trained on. `ml_service.py` loads it once and keeps
+it in memory rather than reloading it per request.
 
 ## Running it locally
 
@@ -102,48 +123,32 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-- Interactive docs (try it in the browser): **http://localhost:8000/docs**
+- Interactive docs: **http://localhost:8000/docs**
 - Health check: **http://localhost:8000/health**
 
-Example request to `/predict`:
-
-```json
-{
-  "enrichment_percent": 3.8,
-  "fuel_density": 10.3,
-  "moderator_density": 1.0
-}
-```
-
-```json
-{
-  "k_eff": 1.0054,
-  "reactor_status": "Critical",
-  "uncertainty": 0.0094
-}
-```
+Typical flow to try it out: register → login (grab the token) → use the
+token as a Bearer token on `/predictions` and `/analytics/*`.
 
 ## Testing
 
-- **Automated**: `pytest` — covers a valid prediction, an invalid (out-of-range)
-  input, and the health check.
-- **Manual**: the Postman collection in `/postman` — one request per reactor
-  status (Subcritical / Critical / Supercritical) plus a validation-error
-  example, so you can see both success and failure responses without writing
-  any code.
+```bash
+pytest
+```
+
+Covers health, valid/invalid predictions, and the analytics endpoints. The
+Postman collection in `/postman` covers the same ground manually, plus
+authentication and validation-error cases.
 
 ## Deployment
 
-Live on Render, redeploying automatically on every push to `main`. Build and
-start commands, plus required environment variables, are set in the Render
-dashboard — see `.env.example` for what's needed.
+Live on Render, redeploying automatically on every push to `main`.
 
 ## Team
 
 | Person | Focus |
 |---|---|
-| Rick (Richard Nyamekye) | Lead — architecture, review, model integration, edge-case tests |
-| Reginald Ankomah | Input validation ranges |
-| Banasco | Manual verification against notebook results |
-| Sakeenah | API documentation |
+| Rick (Richard Nyamekye) | Lead — architecture, auth, ML integration, search/filter/pagination, analytics |
+| Reginald Ankomah | Prediction history filtering/access-control refinements |
+| Banasco | Prediction endpoints (single + batch) |
+| Sakeenah | Database models, API documentation |
 | Angela | Postman collection |

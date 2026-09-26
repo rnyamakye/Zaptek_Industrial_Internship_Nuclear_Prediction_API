@@ -1,0 +1,364 @@
+﻿commit 1670ab099b80a98a3f2d6e5997baaf48ddca1195
+Author: reg-nld <ankomahreginald@gmail.com>
+Date:   Sat Sep 26 09:20:53 2026 +0000
+
+    Enhance prediction history endpoint functionality
+    
+    Refactor prediction history endpoint with enhanced filtering, sorting, and pagination features. Update user access control for predictions.
+
+diff --git a/app/api/routes.py b/app/api/routes.py
+index 2d7e2bf..e8b5d6e 100644
+--- a/app/api/routes.py
++++ b/app/api/routes.py
+@@ -1,7 +1,8 @@
+ from datetime import datetime
+ from typing import Literal
+ 
+-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
++from fastapi import APIRouter, Depends, HTTPException, Query, status
++from sqlalchemy import asc, desc
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import get_current_user
+@@ -14,6 +15,7 @@ from app.schemas.prediction import (
+     PredictionRecordResponse,
+ )
+ 
++
+ router = APIRouter(
+     prefix="/predictions",
+     tags=["predictions"],
+@@ -23,6 +25,10 @@ router = APIRouter(
+ MODEL_VERSION = "v1.0"
+ 
+ 
++# ==========================================================
++# CREATE SINGLE PREDICTION
++# ==========================================================
++
+ @router.post(
+     "",
+     response_model=PredictionRecordResponse,
+@@ -67,6 +73,10 @@ def create_prediction(
+     return prediction
+ 
+ 
++# ==========================================================
++# BATCH PREDICTIONS
++# ==========================================================
++
+ @router.post(
+     "/batch",
+     response_model=list[PredictionRecordResponse],
+@@ -127,81 +137,175 @@ def create_batch_predictions(
+     return predictions
+ 
+ 
++# ==========================================================
++# PREDICTION HISTORY
++# SEARCH / FILTER / SORT / PAGINATION
++# ==========================================================
++
+ @router.get(
+     "",
+     response_model=list[PredictionRecordResponse],
++    summary="Get prediction history",
++    description=(
++        "Retrieve prediction history with optional filtering, "
++        "sorting, and pagination."
++    ),
+ )
+ def get_predictions(
+-    response: Response,
+-    db: Session = Depends(get_db),
+-    current_user: User = Depends(get_current_user),
+     status_filter: str | None = Query(
+-        None, alias="status", description="Filter by reactor status, e.g. Critical"
++        None,
++        alias="status",
++        description="Filter predictions by reactor status.",
++    ),
++    min_enrichment: float | None = Query(
++        None,
++        description="Minimum uranium enrichment percentage.",
++    ),
++    max_enrichment: float | None = Query(
++        None,
++        description="Maximum uranium enrichment percentage.",
+     ),
+-    enrichment_min: float | None = Query(None, description="Minimum enrichment_percent"),
+-    enrichment_max: float | None = Query(None, description="Maximum enrichment_percent"),
+-    date_from: datetime | None = Query(None, description="Only predictions created on/after this timestamp"),
+-    date_to: datetime | None = Query(None, description="Only predictions created on/before this timestamp"),
+     user_id: int | None = Query(
+-        None, description="Admin only: filter by a specific user's predictions"
++        None,
++        description="Filter predictions by user ID. Admin users can use this filter.",
++    ),
++    start_date: datetime | None = Query(
++        None,
++        description="Return predictions created on or after this date.",
++    ),
++    end_date: datetime | None = Query(
++        None,
++        description="Return predictions created on or before this date.",
++    ),
++    sort_by: Literal[
++        "created_at",
++        "enrichment",
++        "k_eff",
++        "status",
++    ] = Query(
++        "created_at",
++        description="Field to sort by.",
++    ),
++    order: Literal["asc", "desc"] = Query(
++        "desc",
++        description="Sort order: ascending or descending.",
++    ),
++    page: int = Query(
++        1,
++        ge=1,
++        description="Page number.",
+     ),
+-    sort_by: Literal["created_at", "k_eff", "enrichment_percent"] = Query(
+-        "created_at", description="Field to sort by"
++    limit: int = Query(
++        20,
++        ge=1,
++        le=100,
++        description="Number of predictions per page.",
+     ),
+-    sort_order: Literal["asc", "desc"] = Query("desc", description="Sort direction"),
+-    skip: int = Query(0, ge=0, description="Number of records to skip"),
+-    limit: int = Query(20, ge=1, le=100, description="Max number of records to return"),
++    db: Session = Depends(get_db),
++    current_user: User = Depends(get_current_user),
+ ):
+     """
+-    Get prediction history, with search/filter/sort/pagination.
++    Get prediction history with filtering, sorting, and pagination.
+ 
+-    Regular users only ever see their own predictions. Admins see
+-    everyone's by default, and can optionally narrow to one user via
+-    ?user_id=.
++    Normal users can only view their own predictions.
++    Admin users can view predictions from all users and
++    optionally filter by user ID.
+     """
+ 
++    # Start the database query
+     query = db.query(PredictionRecord)
+ 
+-    if current_user.role == "admin":
+-        if user_id is not None:
+-            query = query.filter(PredictionRecord.user_id == user_id)
+-        # else: no user filter -> admin sees all users' predictions
+-    else:
+-        query = query.filter(PredictionRecord.user_id == current_user.id)
++    # ------------------------------------------------------
++    # USER ACCESS CONTROL
++    # ------------------------------------------------------
++
++    if current_user.role != "admin":
++        # Normal users can only see their own predictions
++        query = query.filter(
++            PredictionRecord.user_id == current_user.id
++        )
++
++    elif user_id is not None:
++        # Admin users can filter by a specific user
++        query = query.filter(
++            PredictionRecord.user_id == user_id
++        )
++
++    # ------------------------------------------------------
++    # FILTER BY REACTOR STATUS
++    # ------------------------------------------------------
++
++    if status_filter:
++        query = query.filter(
++            PredictionRecord.reactor_status == status_filter
++        )
++
++    # ------------------------------------------------------
++    # FILTER BY ENRICHMENT RANGE
++    # ------------------------------------------------------
++
++    if min_enrichment is not None:
++        query = query.filter(
++            PredictionRecord.enrichment_percent >= min_enrichment
++        )
+ 
+-    if status_filter is not None:
+-        query = query.filter(PredictionRecord.reactor_status.ilike(status_filter))
++    if max_enrichment is not None:
++        query = query.filter(
++            PredictionRecord.enrichment_percent <= max_enrichment
++        )
++
++    # ------------------------------------------------------
++    # FILTER BY DATE RANGE
++    # ------------------------------------------------------
+ 
+-    if enrichment_min is not None:
+-        query = query.filter(PredictionRecord.enrichment_percent >= enrichment_min)
++    if start_date is not None:
++        query = query.filter(
++            PredictionRecord.created_at >= start_date
++        )
+ 
+-    if enrichment_max is not None:
+-        query = query.filter(PredictionRecord.enrichment_percent <= enrichment_max)
++    if end_date is not None:
++        query = query.filter(
++            PredictionRecord.created_at <= end_date
++        )
+ 
+-    if date_from is not None:
+-        query = query.filter(PredictionRecord.created_at >= date_from)
++    # ------------------------------------------------------
++    # SORTING
++    # ------------------------------------------------------
+ 
+-    if date_to is not None:
+-        query = query.filter(PredictionRecord.created_at <= date_to)
++    sort_fields = {
++        "created_at": PredictionRecord.created_at,
++        "enrichment": PredictionRecord.enrichment_percent,
++        "k_eff": PredictionRecord.k_eff,
++        "status": PredictionRecord.reactor_status,
++    }
++
++    sort_column = sort_fields[sort_by]
++
++    if order == "asc":
++        query = query.order_by(asc(sort_column))
++    else:
++        query = query.order_by(desc(sort_column))
+ 
+-    total = query.count()
++    # ------------------------------------------------------
++    # PAGINATION
++    # ------------------------------------------------------
+ 
+-    sort_column = getattr(PredictionRecord, sort_by)
+-    sort_column = sort_column.asc() if sort_order == "asc" else sort_column.desc()
++    skip = (page - 1) * limit
+ 
+     predictions = (
+-        query.order_by(sort_column)
++        query
+         .offset(skip)
+         .limit(limit)
+         .all()
+     )
+ 
+-    # Lets clients page through results without changing the response shape.
+-    response.headers["X-Total-Count"] = str(total)
+-
+     return predictions
+ 
+ 
++# ==========================================================
++# GET ONE PREDICTION
++# ==========================================================
++
+ @router.get(
+     "/{prediction_id}",
+     response_model=PredictionRecordResponse,
+@@ -214,15 +318,17 @@ def get_prediction(
+     """
+     Get one prediction by ID.
+ 
+-    Users can only access their own predictions. Admins can access any.
++    Users can only access their own predictions.
+     """
+ 
+-    query = db.query(PredictionRecord).filter(PredictionRecord.id == prediction_id)
+-
+-    if current_user.role != "admin":
+-        query = query.filter(PredictionRecord.user_id == current_user.id)
+-
+-    prediction = query.first()
++    prediction = (
++        db.query(PredictionRecord)
++        .filter(
++            PredictionRecord.id == prediction_id,
++            PredictionRecord.user_id == current_user.id,
++        )
++        .first()
++    )
+ 
+     if prediction is None:
+         raise HTTPException(
+@@ -233,6 +339,10 @@ def get_prediction(
+     return prediction
+ 
+ 
++# ==========================================================
++# DELETE ONE PREDICTION
++# ==========================================================
++
+ @router.delete(
+     "/{prediction_id}",
+     status_code=status.HTTP_204_NO_CONTENT,
+@@ -243,17 +353,18 @@ def delete_prediction(
+     current_user: User = Depends(get_current_user),
+ ):
+     """
+-    Delete a prediction.
+-
+-    Users can only delete their own predictions. Admins can delete any.
++    Delete a prediction belonging to the currently
++    authenticated user.
+     """
+ 
+-    query = db.query(PredictionRecord).filter(PredictionRecord.id == prediction_id)
+-
+-    if current_user.role != "admin":
+-        query = query.filter(PredictionRecord.user_id == current_user.id)
+-
+-    prediction = query.first()
++    prediction = (
++        db.query(PredictionRecord)
++        .filter(
++            PredictionRecord.id == prediction_id,
++            PredictionRecord.user_id == current_user.id,
++        )
++        .first()
++    )
+ 
+     if prediction is None:
+         raise HTTPException(
+@@ -265,29 +376,3 @@ def delete_prediction(
+     db.commit()
+ 
+     return None
+-
+-
+-# from fastapi import APIRouter, HTTPException
+-# from pydantic import ValidationError
+-
+-# from app.models.ml_service import predict as run_prediction
+-# from app.schemas.prediction import PredictionRequest, PredictionResponse
+-
+-# router = APIRouter(tags=["prediction"])
+-
+-
+-# @router.post("/predict", response_model=PredictionResponse, status_code=200)
+-# def predict_reactor_behavior(payload: PredictionRequest):
+-#     """
+-#     Accepts enrichment_percent, fuel_density, moderator_density.
+-#     Returns predicted k_eff, reactor_status, and uncertainty (if available).
+-#     """
+-#     try:
+-#         result = run_prediction(payload)
+-#     except ValidationError as e:
+-#         raise HTTPException(status_code=422, detail=str(e))
+-#     except Exception as e:
+-#         # Catch-all so a model error returns a clean 500 instead of crashing
+-#         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+-
+-#     return result
+\ No newline at end of file
