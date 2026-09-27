@@ -75,3 +75,34 @@ def classify_status(k_eff: float, thresholds: dict) -> str:
     elif k_eff <= thresholds["supercritical_min"]:
         return "Critical"
     return "Supercritical"
+
+
+def get_model_info() -> dict:
+    """
+    Metadata about the loaded model, for GET /model/info.
+    Falls back to a minimal payload if the real model file isn't present.
+    """
+    bundle = _load_model()
+
+    if bundle is None:
+        return {
+            "model_loaded": False,
+            "regressor_name": None,
+            "feature_names": ["enrichment_percent", "fuel_density", "moderator_density"],
+            "status_thresholds": {"subcritical_max": 0.95, "supercritical_min": 1.05},
+            "training_data_range": None,
+            "metrics": None,
+            "sklearn_version": None,
+            "trained_at_utc": None,
+        }
+
+    return {
+        "model_loaded": True,
+        "regressor_name": bundle.get("regressor_name"),
+        "feature_names": bundle.get("feature_names"),
+        "status_thresholds": bundle.get("status_thresholds"),
+        "training_data_range": bundle.get("training_data_range"),
+        "metrics": bundle.get("metrics"),
+        "sklearn_version": bundle.get("sklearn_version"),
+        "trained_at_utc": bundle.get("trained_at_utc"),
+    }
