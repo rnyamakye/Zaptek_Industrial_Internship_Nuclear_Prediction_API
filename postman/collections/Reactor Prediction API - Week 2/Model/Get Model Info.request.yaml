@@ -1,0 +1,13 @@
+$kind: http-request
+description: "Returns metadata about the currently loaded model: algorithm, feature order, status thresholds, valid input ranges, and validation metrics."
+url: '{{base_url}}/model/info'
+method: GET
+headers:
+  Authorization: Bearer {{access_token}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test("Model info returns 200", function () { pm.response.to.have.status(200); });
+      pm.test("Has feature_names", function () { pm.expect(pm.response.json()).to.have.property("feature_names"); });
+    language: text/javascript
+order: 1000
